@@ -57,7 +57,11 @@ function planning(answer: Parameters<typeof http.post>[1]) {
 	server.use(http.post('/api/definitions/plan', answer))
 }
 
-/** Opens the import dialog and hands it a definitions file carrying the text. */
+/**
+ * Opens the import dialog and hands it a definitions file carrying the text.
+ * @param text - The definitions file content to upload.
+ * @returns The rendered query client.
+ */
 async function importing(text: string) {
 	const client = renderAt('/field-groups')
 	await userEvent.click(await screen.findByRole('button', { name: 'Import definitions' }))
