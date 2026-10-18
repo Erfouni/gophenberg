@@ -246,15 +246,6 @@ export function ImportDefinitions() {
 			const text = await chosen.text()
 			return { text, plan: await planDefinitions(text) }
 		},
-		onSuccess: (answered) => {
-			setNotice('')
-			setFile(answered.text)
-			setPlan(answered.plan)
-		},
-		onError: (cause) => {
-			setPlan(null)
-			setNotice(cause.message)
-		},
 	})
 	const perform = useMutation({
 		mutationFn: () => applyDefinitions(file, confirmed),
@@ -306,7 +297,17 @@ export function ImportDefinitions() {
 										setConfirmed([])
 										setNotice('')
 										perform.reset()
-										read.mutate(chosen)
+										read.mutate(chosen, {
+											onSuccess: (answered) => {
+												setNotice('')
+												setFile(answered.text)
+												setPlan(answered.plan)
+											},
+											onError: (cause) => {
+												setPlan(null)
+												setNotice(cause.message)
+											},
+										})
 									}
 								}}
 							/>

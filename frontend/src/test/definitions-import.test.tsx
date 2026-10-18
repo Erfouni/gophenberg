@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { http, HttpResponse, server } from '@gophenberg/frontend-sdk/testing'
-import { fireEvent, screen } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { resetLocaleData, setLocaleData } from '@wordpress/i18n'
 import { expect, onTestFinished, test } from 'vitest'
 
 import { chosenDefinitions } from '../content/ImportDefinitions'
 import { catalogFor } from '../i18n/catalog'
+import { gate } from './gate'
 import { renderAt } from './render'
 
 const PLAN = {
@@ -58,13 +59,93 @@ function planning(answer: Parameters<typeof http.post>[1]) {
 
 /** Opens the import dialog and hands it a definitions file carrying the text. */
 async function importing(text: string) {
-	renderAt('/field-groups')
+	const client = renderAt('/field-groups')
 	await userEvent.click(await screen.findByRole('button', { name: 'Import definitions' }))
 	await userEvent.upload(
 		screen.getByLabelText('Definitions file'),
 		new File([text], 'definitions.json', { type: 'application/json' }),
 	)
+	return client
 }
+
+test.each(['success', 'error'] as const)(
+	'keeps and applies the latest file when an earlier plan answers with %s last',
+	async (answer) => {
+		const earlier = gate()
+		const requested = gate()
+		onTestFinished(earlier.release)
+		const latest = '{"format":"1.0.0","types":[],"groups":[]}'
+		let sent = ''
+		planning(async ({ request }) => {
+			if ((await request.text()) !== latest) {
+				requested.release()
+				await earlier.held
+				return answer === 'success'
+					? HttpResponse.json(PLAN)
+					: new HttpResponse('gateway said no', { status: 502 })
+			}
+			return HttpResponse.json({
+				changes: [{ action: 'create', subject: 'type', key: 'latest', label: 'Latest type' }],
+				warnings: [],
+			})
+		})
+		server.use(
+			http.post('/api/definitions/apply', async ({ request }) => {
+				sent = await request.text()
+				return HttpResponse.json({ applied: [], skipped: [] })
+			}),
+		)
+
+		const client = await importing('{"format":"1.0.0"}')
+		await requested.held
+		await userEvent.upload(
+			screen.getByLabelText('Definitions file'),
+			new File([latest], 'latest.json', { type: 'application/json' }),
+		)
+		await screen.findByText('Add Latest type')
+		earlier.release()
+		await waitFor(() => expect(client.isMutating()).toBe(0))
+
+		expect(screen.getByText('Add Latest type')).toBeInTheDocument()
+		expect(screen.queryByText('Add Event details')).not.toBeInTheDocument()
+		expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+		await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+		await screen.findByText('Done. The site now holds what the file describes.')
+		expect(JSON.parse(sent)).toEqual({ ...JSON.parse(latest), confirm: [] })
+	},
+)
+
+test('keeps the latest planning error when an earlier plan succeeds last', async () => {
+	const earlier = gate()
+	const requested = gate()
+	onTestFinished(earlier.release)
+	const latest = '{"format":"1.0.0","groups":[]}'
+	planning(async ({ request }) => {
+		if ((await request.text()) !== latest) {
+			requested.release()
+			await earlier.held
+			return HttpResponse.json(PLAN)
+		}
+		return HttpResponse.json(
+			{ error: 'too big', code: 'definitions_too_large', meta: { max: 262144 } },
+			{ status: 413 },
+		)
+	})
+
+	const client = await importing('{"format":"1.0.0"}')
+	await requested.held
+	await userEvent.upload(
+		screen.getByLabelText('Definitions file'),
+		new File([latest], 'latest.json', { type: 'application/json' }),
+	)
+	expect(await screen.findByRole('alert')).toHaveTextContent(/262\.144 bytes/)
+	earlier.release()
+	await waitFor(() => expect(client.isMutating()).toBe(0))
+
+	expect(screen.getByRole('alert')).toHaveTextContent(/262\.144 bytes/)
+	expect(screen.queryByText('Add Event details')).not.toBeInTheDocument()
+	expect(screen.queryByRole('button', { name: 'Apply' })).not.toBeInTheDocument()
+})
 
 test('shows what a chosen definitions file would change', async () => {
 	planning(() => HttpResponse.json(PLAN))
