@@ -15,6 +15,7 @@ import (
 
 	"github.com/gopherium/gophenberg/internal/content"
 	"github.com/gopherium/gophenberg/internal/content/contenttest"
+	"github.com/gopherium/gophenberg/internal/postgres"
 	"github.com/gopherium/gophenberg/internal/postgres/db"
 )
 
@@ -471,5 +472,144 @@ func TestStoppingNestingWaitsForAnItemBeingFiledUnderAParent(t *testing.T) {
 
 	if err := <-flattened; !errors.Is(err, content.ErrNestingInUse) {
 		t.Errorf("Update() error = %v, want the child filed meanwhile keeping the type nesting", err)
+	}
+}
+
+// renamingInTheBackground saves the page under a new slug on its own goroutine and returns the outcome.
+func renamingInTheBackground(
+	t *testing.T, items *postgres.ContentStore, page content.Content, slug string,
+) <-chan error {
+	t.Helper()
+	renamed, err := page.Rename(slug)
+	if err != nil {
+		t.Fatalf("Rename(%q) error = %v, want nil", slug, err)
+	}
+	renamed.UpdatedAt = page.UpdatedAt.Add(time.Second)
+	saved := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_, err := items.Update(ctx, renamed, page.UpdatedAt, nil, 0)
+		saved <- err
+	}()
+	return saved
+}
+
+func TestRenamingAParentWaitsForADescendantSaveAndFilesItUnderItsNewSlug(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name, held, want string
+		depth            int
+	}{
+		{"child", "pages/guide/team", "pages/manual/team", 0},
+		{"grandchild", "pages/guide/about/team", "pages/manual/about/team", 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			items, _, author, pool := nestingStoresWithPool(t)
+			guide := mustNest(t, items, nil, "Guide", author)
+			about := mustNest(t, items, &guide, "About", author)
+			leaf := mustNest(t, items, &about, "Leaf", author)
+			saved := []content.Content{about, leaf}[tc.depth]
+			rival := rivalTransaction(t, pool)
+			if _, err := rival.Exec(t.Context(),
+				`UPDATE core.content SET slug = 'team', path = $2 WHERE id = $1`, saved.ID, tc.held); err != nil {
+				t.Fatalf("saving the %s under a new slug: %v", tc.name, err)
+			}
+			renamed := renamingInTheBackground(t, items, guide, "manual")
+			waitingOn(t, pool, "%core.content%")
+
+			if err := rival.Commit(t.Context()); err != nil {
+				t.Fatalf("committing the %s save: %v", tc.name, err)
+			}
+
+			if err := <-renamed; err != nil {
+				t.Fatalf("Update() error = %v, want nil", err)
+			}
+			stored, err := items.ByID(t.Context(), saved.ID)
+			if err != nil {
+				t.Fatalf("ByID() error = %v, want nil", err)
+			}
+			if stored.Path != tc.want {
+				t.Errorf("Path = %q, want the %s filed under the slug it holds after its save", stored.Path, tc.name)
+			}
+		})
+	}
+}
+
+func TestRenamingAParentLocksItsDescendantsFromTheTopDown(t *testing.T) {
+	t.Parallel()
+
+	items, _, author, pool := nestingStoresWithPool(t)
+	guide := mustNest(t, items, nil, "Guide", author)
+	leaf := mustNest(t, items, nil, "Leaf", author)
+	about := mustNest(t, items, &guide, "About", author)
+	if leaf.ID.String() >= about.ID.String() {
+		t.Fatalf("ids = %v and %v, want the grandchild's to sort first so that locking by id would take it first",
+			leaf.ID, about.ID)
+	}
+	moved, err := content.Reparent(pageType(), leaf, &about, 0)
+	if err != nil {
+		t.Fatalf("Reparent() error = %v, want nil", err)
+	}
+	moved.UpdatedAt = leaf.UpdatedAt.Add(time.Second)
+	if _, err := items.Update(t.Context(), moved, leaf.UpdatedAt, nil, 0); err != nil {
+		t.Fatalf("filing the grandchild under the child: %v", err)
+	}
+	rival := rivalTransaction(t, pool)
+	if _, err := rival.Exec(t.Context(),
+		`SELECT id FROM core.content WHERE id = $1 FOR UPDATE`, about.ID); err != nil {
+		t.Fatalf("holding the child as its own save does: %v", err)
+	}
+	renamed := renamingInTheBackground(t, items, guide, "manual")
+	waitingOn(t, pool, "%core.content%")
+
+	if _, err := rival.Exec(t.Context(),
+		`SELECT id FROM core.content WHERE id = $1 FOR UPDATE NOWAIT`, leaf.ID); err != nil {
+		t.Fatalf("locking the grandchild error = %v, want it free while the rename waits on the child", err)
+	}
+	if err := rival.Commit(t.Context()); err != nil {
+		t.Fatalf("committing the child save: %v", err)
+	}
+
+	if err := <-renamed; err != nil {
+		t.Fatalf("Update() error = %v, want nil", err)
+	}
+	stored, err := items.ByID(t.Context(), leaf.ID)
+	if err != nil {
+		t.Fatalf("ByID() error = %v, want nil", err)
+	}
+	if stored.Path != "pages/manual/about/leaf" {
+		t.Errorf("Path = %q, want the grandchild under the renamed parent", stored.Path)
+	}
+}
+
+func TestEditingAParentDoesNotWaitForAPageBeingFiledUnderItsChild(t *testing.T) {
+	t.Parallel()
+
+	items, _, author, pool := nestingStoresWithPool(t)
+	guide := mustNest(t, items, nil, "Guide", author)
+	about := mustNest(t, items, &guide, "About", author)
+	rival := rivalTransaction(t, pool)
+	if _, err := db.New(rival).LockParent(t.Context(), db.LockParentParams{
+		ID: about.ID, ChildID: uuid.Must(uuid.NewV7()),
+	}); err != nil {
+		t.Fatalf("holding the child as a page is filed under it: %v", err)
+	}
+	edited := guide
+	edited.Title = "Guide retitled"
+	edited.UpdatedAt = guide.UpdatedAt.Add(time.Second)
+	saved := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_, err := items.Update(ctx, edited, guide.UpdatedAt, nil, 0)
+		saved <- err
+	}()
+
+	if err := finishes(t, saved, 5*time.Second); err != nil {
+		t.Errorf("Update() error = %v, want nil", err)
 	}
 }

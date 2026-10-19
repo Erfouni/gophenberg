@@ -958,6 +958,29 @@ func (q *Queries) LockDeclaredFieldKeys(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
+const lockDescendants = `-- name: LockDescendants :exec
+WITH RECURSIVE below AS (
+    SELECT c.id, 0 AS depth
+    FROM core.content c
+    WHERE c.id = $1
+  UNION ALL
+    SELECT child.id, below.depth + 1
+    FROM core.content child
+    JOIN below ON child.parent_id = below.id
+) CYCLE id SET looped USING trail
+SELECT p.id
+FROM core.content p
+JOIN below ON below.id = p.id
+WHERE p.id <> $1
+ORDER BY below.depth, p.id
+FOR NO KEY UPDATE OF p
+`
+
+func (q *Queries) LockDescendants(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockDescendants, id)
+	return err
+}
+
 const lockParent = `-- name: LockParent :one
 WITH RECURSIVE chain AS (
     SELECT c.id, c.parent_id
