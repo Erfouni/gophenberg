@@ -288,6 +288,7 @@ export function ImportDefinitions() {
 								id="definitions-file"
 								type="file"
 								accept=".json,application/json"
+								disabled={perform.isPending}
 								onChange={(event) => {
 									const chosen = chosenDefinitions(event.target.files)
 									event.target.value = ''
