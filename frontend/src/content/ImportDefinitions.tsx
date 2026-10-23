@@ -248,7 +248,8 @@ export function ImportDefinitions() {
 		},
 	})
 	const perform = useMutation({
-		mutationFn: () => applyDefinitions(file, confirmed),
+		mutationFn: (asked: { file: string, confirmed: Confirmed[] }) =>
+			applyDefinitions(asked.file, asked.confirmed),
 		onSuccess: async (answered) => {
 			setNotice('')
 			setPlan(null)
@@ -329,7 +330,7 @@ export function ImportDefinitions() {
 							{__('Close', 'gophenberg')}
 						</Button>
 						{plan !== null && (
-							<Button loading={perform.isPending} onClick={() => perform.mutate()}>
+							<Button loading={perform.isPending} onClick={() => perform.mutate({ file, confirmed })}>
 								{__('Apply', 'gophenberg')}
 							</Button>
 						)}

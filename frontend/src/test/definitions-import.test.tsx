@@ -256,6 +256,48 @@ test('keeps the file field locked when the dialog is opened again while an impor
 	expect(screen.getByLabelText('Definitions file')).toBeEnabled()
 })
 
+test('sends the file of the plan on screen when Apply is pressed the moment that plan is drawn', async () => {
+	const answer = gate()
+	onTestFinished(answer.release)
+	const latest = '{"format":"1.0.0","types":[],"groups":[]}'
+	let sent = ''
+	planning(async ({ request }) => {
+		if ((await request.text()) !== latest) {
+			return HttpResponse.json(PLAN)
+		}
+		await answer.held
+		return HttpResponse.json({
+			changes: [{ action: 'create', subject: 'type', key: 'latest', label: 'Latest type' }],
+			warnings: [],
+		})
+	})
+	server.use(
+		http.post('/api/definitions/apply', async ({ request }) => {
+			sent = await request.text()
+			return HttpResponse.json({ applied: [], skipped: [] })
+		}),
+	)
+	const pressing = new MutationObserver(() => {
+		if (screen.queryByText('Add Latest type') !== null) {
+			pressing.disconnect()
+			screen.getByRole('button', { name: 'Apply' }).click()
+		}
+	})
+	onTestFinished(() => pressing.disconnect())
+
+	await importing('{"format":"1.0.0"}')
+	await screen.findByText('Add Event details')
+	await userEvent.upload(
+		screen.getByLabelText('Definitions file'),
+		new File([latest], 'latest.json', { type: 'application/json' }),
+	)
+	pressing.observe(document.body, { childList: true, subtree: true })
+	answer.release()
+	await screen.findByText('Done. The site now holds what the file describes.')
+
+	expect(JSON.parse(sent)).toEqual({ ...JSON.parse(latest), confirm: [] })
+})
+
 test('shows what a chosen definitions file would change', async () => {
 	planning(() => HttpResponse.json(PLAN))
 
