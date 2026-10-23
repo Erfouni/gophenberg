@@ -4,6 +4,7 @@ package content
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -23,6 +24,12 @@ var ErrTooDeep = errors.New("content: the nesting limit is reached")
 
 // ErrReservedAddress reports that an address names a place the CMS keeps.
 var ErrReservedAddress = errors.New("content: the address is reserved")
+
+// ReservedAddress returns the error naming an address the CMS keeps.
+func ReservedAddress(path string) error {
+	return Refuse(ErrReservedAddress, "address_reserved",
+		fmt.Sprintf("%s: %q", ErrReservedAddress, path), Details{"path": path})
+}
 
 // ErrHoldsChildren reports that content still holds content nested under it.
 var ErrHoldsChildren = errors.New("content: the item still holds children")
@@ -93,11 +100,8 @@ func Reparent(t Type, c Content, parent *Content, height int) (Content, error) {
 
 // guardAddress returns the reason an address names a place the CMS keeps, if it does.
 func guardAddress(path string) error {
-	if ReservedRoot(FirstSegment(path)) {
-		return ErrReservedAddress
-	}
-	if RootPagination(path) {
-		return ErrReservedAddress
+	if ReservedRoot(FirstSegment(path)) || RootPagination(path) {
+		return ReservedAddress(path)
 	}
 	return nil
 }

@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
 
 import { errorText } from '../i18n/errors'
-import { errorTemplates, updateTemplates } from '../i18n/errorTemplates'
+import { errorTemplates, typeTemplates, updateTemplates } from '../i18n/errorTemplates'
 import { repositoryRoot } from '../../scripts/config.ts'
 
 test('reads the message a code stands for', () => {
@@ -104,7 +104,30 @@ test('carries a message for every code the server can answer with', () => {
 	const emitted = execFileSync('sh', [script], { cwd: repositoryRoot(), encoding: 'utf8' })
 		.split('\n')
 		.filter((held) => held !== '')
-	const held = { ...errorTemplates(), ...updateTemplates() }
+	const held = { ...errorTemplates(), ...typeTemplates(), ...updateTemplates() }
 
 	expect(emitted.filter((code) => held[code] === undefined)).toEqual([])
+})
+
+test('names the type and the route word a hand over would give it', () => {
+	const held = errorText({
+		error: 'content: route word reserved: "Page" would answer under "page"',
+		code: 'derived_route_word_reserved',
+		meta: { type: 'post', name: 'Page', word: 'page' },
+	})
+
+	expect(held).toBe(
+		'Page would move to /page, which Gophenberg keeps for itself. Change its plural name and try again.',
+	)
+})
+
+test('names the address no item can answer at', () => {
+	const held = errorText({
+		error: 'content: the address is reserved: "page/2"',
+		code: 'address_reserved',
+		meta: { path: 'page/2' },
+	})
+
+	expect(held).toContain('Gophenberg keeps /page/2 for itself or for another content type')
+	expect(held).toContain('Give the item a different slug.')
 })

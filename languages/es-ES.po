@@ -18,6 +18,10 @@ msgstr "%(name)s no se puede usar como nombre de tema. Nombra el archivo zip com
 msgid "%(name)s moves to /%(word)s. Every address of both types changes."
 msgstr "El tipo %(name)s pasa a /%(word)s. Cambian todas las direcciones de ambos tipos."
 
+#, fuzzy
+msgid "%(name)s would move to /%(word)s, which Gophenberg keeps for itself. Change its plural name and try again."
+msgstr "El tipo %(name)s pasaría a /%(word)s, que Gophenberg reserva para sí mismo. Cambia su nombre en plural e inténtalo de nuevo."
+
 msgid "(no title)"
 msgstr "(sin título)"
 
@@ -252,8 +256,9 @@ msgstr "Gophenberg no responde en %(value)s. Elige uno de los idiomas de la list
 msgid "Gophenberg has no autosave of yours for this item. Open the item to see the version that is stored."
 msgstr "Gophenberg no tiene ningún guardado automático tuyo de este elemento. Ábrelo para ver la versión guardada."
 
-msgid "Gophenberg keeps this address for itself, so your content cannot answer there. Give the item a different slug."
-msgstr "Gophenberg reserva esta dirección para sí mismo, así que tu contenido no puede usarla. Dale al elemento otra dirección."
+#, fuzzy
+msgid "Gophenberg keeps /%(path)s for itself or for another content type, so your content cannot answer there. Give the item a different slug."
+msgstr "Gophenberg reserva la dirección /%(path)s para sí mismo o para otro tipo de contenido, así que tu contenido no puede usarla. Dale al elemento otro slug."
 
 msgid "Gophenberg keeps this word for itself, so no content type can answer under it. Pick a different route word."
 msgstr "Gophenberg reserva esta palabra para sí mismo, así que ningún tipo de contenido puede usarla. Elige otra palabra de ruta de URL."

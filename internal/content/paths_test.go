@@ -140,6 +140,49 @@ func TestNewRefusesAReservedAddressBehindADroppedSymbolAndAMark(t *testing.T) {
 	}
 }
 
+func TestReservedAddressNamesTheAddress(t *testing.T) {
+	t.Parallel()
+
+	err := content.ReservedAddress("page/2")
+
+	if !errors.Is(err, content.ErrReservedAddress) {
+		t.Errorf("error = %v, want it to carry %v", err, content.ErrReservedAddress)
+	}
+	if code, _ := content.CodeOf(err); code != "address_reserved" {
+		t.Errorf("code = %q, want address_reserved", code)
+	}
+	if held, _ := content.DetailsOf(err); held["path"] != "page/2" {
+		t.Errorf("details = %v, want the path page/2 named", held)
+	}
+	if !strings.Contains(err.Error(), `"page/2"`) {
+		t.Errorf("message = %q, want it to name the address", err.Error())
+	}
+}
+
+func TestNewNamesTheReservedAddressItRefuses(t *testing.T) {
+	t.Parallel()
+
+	root := postType()
+	root.Hierarchical = true
+	parent := mustNew(t, root, nil, "Page")
+	for _, tc := range []struct {
+		parent      *content.Content
+		title, path string
+	}{
+		{nil, "Admin", "admin"},
+		{&parent, "2", "page/2"},
+	} {
+		_, err := content.New(root, tc.parent, tc.title, uuid.Must(uuid.NewV7()))
+
+		if code, _ := content.CodeOf(err); code != "address_reserved" {
+			t.Errorf("New(%q) code = %q, want address_reserved", tc.title, code)
+		}
+		if held, _ := content.DetailsOf(err); held["path"] != tc.path {
+			t.Errorf("New(%q) details = %v, want the path %s named", tc.title, held, tc.path)
+		}
+	}
+}
+
 func TestNewLeavesAReservedWordAloneBelowTheRoot(t *testing.T) {
 	t.Parallel()
 

@@ -39,7 +39,18 @@ func nestingPosts(t *testing.T, types content.TypeStore) content.Type {
 	return stored
 }
 
-// carriedOnto fails the case unless the refusal carries address_reserved and names the path.
+// derivedWordReserved fails the case unless the error carries derived_route_word_reserved, the type and the word.
+func derivedWordReserved(t *testing.T, err error, key, name, word string) {
+	t.Helper()
+	if code, _ := content.CodeOf(err); code != "derived_route_word_reserved" {
+		t.Errorf("code = %q, want derived_route_word_reserved", code)
+	}
+	if held, _ := content.DetailsOf(err); held["type"] != key || held["name"] != name || held["word"] != word {
+		t.Errorf("details = %v, want the type %s named %q and the word %q", held, key, name, word)
+	}
+}
+
+// carriedOnto fails the case unless the error carries address_reserved and names the path.
 func carriedOnto(t *testing.T, err error, path string) {
 	t.Helper()
 	if code, _ := content.CodeOf(err); code != "address_reserved" {
@@ -84,6 +95,7 @@ func createRefusesARootPaginationAddress(t *testing.T, s Stores) {
 		if !errors.Is(err, content.ErrReservedAddress) {
 			t.Errorf("%s Create() error = %v, want %v", name, err, content.ErrReservedAddress)
 		}
+		carriedOnto(t, err, "page/2")
 		if StillStored(t, s.Content, built) {
 			t.Errorf("%s item stored, want the refused create to store nothing", name)
 		}
@@ -96,7 +108,7 @@ func updateRefusesAMoveOntoARootPaginationAddress(t *testing.T, s Stores) {
 	root := nestingPosts(t, s.Types)
 	parent := StoreItem(t, s.Content, root, nil, "Page", author)
 	held := StoreItem(t, s.Content, root, &parent, "About", author)
-	moved := held.Place(content.PageWord, "2")
+	moved := held.Place(content.PageWord, "3")
 	moved.UpdatedAt = time.Now().UTC()
 
 	_, err := s.Content.Update(t.Context(), moved, held.UpdatedAt, nil, 0)
@@ -104,6 +116,7 @@ func updateRefusesAMoveOntoARootPaginationAddress(t *testing.T, s Stores) {
 	if !errors.Is(err, content.ErrReservedAddress) {
 		t.Fatalf("Update() error = %v, want %v", err, content.ErrReservedAddress)
 	}
+	carriedOnto(t, err, "page/3")
 	unmoved(t, s.Content, held)
 }
 
@@ -252,6 +265,7 @@ func updateRefusesAHandOverWhoseOldRootLabelGivesPage(t *testing.T, s Stores) {
 	if !errors.Is(err, content.ErrRouteWordReserved) {
 		t.Fatalf("Update() error = %v, want %v", err, content.ErrRouteWordReserved)
 	}
+	derivedWordReserved(t, err, content.TypePost, "Page", "page")
 	if held, err := s.Types.ByKey(t.Context(), content.TypePost); err != nil || !held.Default || held.RouteWord != "" {
 		t.Errorf("post = %+v, %v, want it still holding the root", held, err)
 	}

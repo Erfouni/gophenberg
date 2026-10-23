@@ -185,7 +185,7 @@ func (s *server) addressFree(r *http.Request, path, ownKey string) error {
 	root := content.FirstSegment(path)
 	for _, t := range types {
 		if t.Key != ownKey && t.RouteWord == root {
-			return fmt.Errorf("%w: %s answers under %q", content.ErrReservedAddress, t.PluralLabel, root)
+			return fmt.Errorf("%w: %s answers under %q", content.ReservedAddress(path), t.PluralLabel, root)
 		}
 	}
 	return nil

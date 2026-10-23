@@ -16,6 +16,7 @@ var typeRootWordCases = []Case{
 	{"UpdateHandsTheRootToATypeWithAnUnderscoredLabel", updateHandsTheRootToATypeWithAnUnderscoredLabel},
 	{"UpdateRefusesToHandTheRootOntoATakenKey", updateRefusesToHandTheRootOntoATakenKey},
 	{"UpdateKeepsAPageKeyedRootOffThePageWord", updateKeepsAPageKeyedRootOffThePageWord},
+	{"UpdateRefusesAHandOverWhoseOldRootKeyIsReserved", updateRefusesAHandOverWhoseOldRootKeyIsReserved},
 }
 
 // relabelPost stores the built-in post type under new labels.
@@ -146,5 +147,35 @@ func updateKeepsAPageKeyedRootOffThePageWord(t *testing.T, s Stores) {
 	}
 	if got := AddressOf(t, s.Content, about.ID); got != "about" {
 		t.Errorf("page address = %q, want the refused hand over to have moved nothing", got)
+	}
+}
+
+// updateRefusesAHandOverWhoseOldRootKeyIsReserved refuses a hand over whose fallback key is a word the CMS keeps.
+func updateRefusesAHandOverWhoseOldRootKeyIsReserved(t *testing.T, s Stores) {
+	files, err := content.NewType("media", "3D File", "3D Files", "files")
+	if err != nil {
+		t.Fatalf("NewType(media) error = %v, want nil", err)
+	}
+	stored, err := s.Types.Create(t.Context(), files)
+	if err != nil {
+		t.Fatalf("Create(media) error = %v, want nil", err)
+	}
+	stored.Default, stored.UpdatedAt = true, time.Now().UTC()
+	if _, err := s.Types.Update(t.Context(), stored); err != nil {
+		t.Fatalf("handing the root to the media type: %v", err)
+	}
+	RegisterPageType(t, s.Types)
+
+	_, err = rootPage(t, s.Types)
+
+	if !errors.Is(err, content.ErrRouteWordReserved) {
+		t.Fatalf("Update() error = %v, want %v", err, content.ErrRouteWordReserved)
+	}
+	derivedWordReserved(t, err, "media", "3D Files", "media")
+	if held, err := s.Types.ByKey(t.Context(), "media"); err != nil || !held.Default || held.RouteWord != "" {
+		t.Errorf("media = %+v, %v, want it still holding the root", held, err)
+	}
+	if held, err := s.Types.ByKey(t.Context(), "page"); err != nil || held.Default || held.RouteWord != "pages" {
+		t.Errorf("page = %+v, %v, want it still under pages", held, err)
 	}
 }

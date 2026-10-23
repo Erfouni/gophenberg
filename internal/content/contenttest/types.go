@@ -361,6 +361,7 @@ func updateRefusesToHandTheRootToAReservedAddress(t *testing.T, s Stores) {
 	if !errors.Is(err, content.ErrRouteWordReserved) {
 		t.Fatalf("Update() error = %v, want %v", err, content.ErrRouteWordReserved)
 	}
+	derivedWordReserved(t, err, content.TypePost, "Media", "media")
 	if got := AddressOf(t, s.Content, about.ID); got != "pages/about" {
 		t.Errorf("page address = %q, want the refused hand over to have moved nothing", got)
 	}

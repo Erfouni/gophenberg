@@ -176,8 +176,15 @@ func TestPatchRefusesAnAddressAnotherTypeAnswersUnder(t *testing.T) {
 	if recorder.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusUnprocessableEntity, recorder.Body.String())
 	}
-	if code := errorCode(t, recorder); code != "address_reserved" {
-		t.Errorf("code = %q, want the address kept for the other type", code)
+	answered := decodeBody[struct {
+		Code string         `json:"code"`
+		Meta map[string]any `json:"meta"`
+	}](t, recorder)
+	if answered.Code != "address_reserved" {
+		t.Errorf("code = %q, want the address kept for the other type", answered.Code)
+	}
+	if answered.Meta["path"] != "pages" {
+		t.Errorf("meta = %v, want the path pages named", answered.Meta)
 	}
 }
 

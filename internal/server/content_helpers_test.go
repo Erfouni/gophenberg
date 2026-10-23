@@ -478,6 +478,7 @@ type fakeTypeStore struct {
 	nextFieldID int
 	listErr     error
 	subErr      error
+	updateErr   error
 }
 
 // newFakeTypeStore returns a registry holding the built-in post type.
@@ -958,6 +959,9 @@ func (s *fakeTypeStore) Create(_ context.Context, t content.Type) (content.Type,
 func (s *fakeTypeStore) Update(_ context.Context, t content.Type) (content.Type, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.updateErr != nil {
+		return content.Type{}, s.updateErr
+	}
 	for i, stored := range s.types {
 		if stored.Key != t.Key {
 			continue

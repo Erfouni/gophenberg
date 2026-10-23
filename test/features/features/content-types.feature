@@ -49,7 +49,7 @@ Feature: Managing content types
     Given the type "page" labeled "Page" and "Pages" under "pages"
     When the administrator relabels "post" as "Page" and "Page"
     And the administrator asks to make "page" the default type
-    Then the request is refused with the code "route_word_reserved"
+    Then the request is refused with the code "derived_route_word_reserved"
     And "post" is the default type
 
   Scenario: Relabeling a type leaves its key and address alone

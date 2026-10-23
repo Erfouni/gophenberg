@@ -4,10 +4,31 @@ package content_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/gopherium/gophenberg/internal/content"
 )
+
+func TestDerivedRouteWordReservedNamesTheTypeAndTheWord(t *testing.T) {
+	t.Parallel()
+
+	err := content.DerivedRouteWordReserved("media", "3D Files", "media")
+
+	if !errors.Is(err, content.ErrRouteWordReserved) {
+		t.Errorf("error = %v, want it to carry %v", err, content.ErrRouteWordReserved)
+	}
+	if code, _ := content.CodeOf(err); code != "derived_route_word_reserved" {
+		t.Errorf("code = %q, want derived_route_word_reserved", code)
+	}
+	held, _ := content.DetailsOf(err)
+	if held["type"] != "media" || held["name"] != "3D Files" || held["word"] != "media" {
+		t.Errorf("details = %v, want the type media, the name 3D Files and the word media named", held)
+	}
+	if !strings.Contains(err.Error(), `"3D Files" would answer under "media"`) {
+		t.Errorf("message = %q, want it to name the type and the word", err.Error())
+	}
+}
 
 func TestRegistryRefusesANewTypeClaimingTheRoot(t *testing.T) {
 	t.Parallel()

@@ -13,7 +13,7 @@ const DOMAIN = 'gophenberg'
 export function errorTemplates(): Record<string, string> {
 	return {
 		address_reserved: __(
-			'Gophenberg keeps this address for itself, so your content cannot answer there. Give the item a different slug.',
+			'Gophenberg keeps /%(path)s for itself or for another content type, so your content cannot answer there. Give the item a different slug.',
 			DOMAIN,
 		),
 		archive_entry_escapes: __(
@@ -549,6 +549,19 @@ export function authTemplates(): Record<string, string> {
 		role_beyond_reach: __('That role holds more than your own.', DOMAIN),
 		role_unknown: __('Nothing declares that role.', DOMAIN),
 		self_role_refused: __('You cannot change your own role.', DOMAIN),
+	}
+}
+
+/**
+ * Returns the message each code a content type write answers with stands for, read fresh like the others.
+ * @returns The messages, keyed by code.
+ */
+export function typeTemplates(): Record<string, string> {
+	return {
+		derived_route_word_reserved: __(
+			'%(name)s would move to /%(word)s, which Gophenberg keeps for itself. Change its plural name and try again.',
+			DOMAIN,
+		),
 	}
 }
 
