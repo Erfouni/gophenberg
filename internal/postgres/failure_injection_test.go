@@ -421,6 +421,41 @@ func TestContentUpdateReportsDescendantsItCannotMove(t *testing.T) {
 	}
 }
 
+// lockTimedContent returns a content store on the pool's database whose statements give up on a held lock.
+func lockTimedContent(t *testing.T, pool *pgxpool.Pool) *postgres.ContentStore {
+	t.Helper()
+	pcfg, err := pgxpool.ParseConfig(pool.Config().ConnString())
+	if err != nil {
+		t.Fatalf("parsing the pool config: %v", err)
+	}
+	pcfg.ConnConfig.RuntimeParams["lock_timeout"] = "200ms"
+	timed, err := pgxpool.NewWithConfig(t.Context(), pcfg)
+	if err != nil {
+		t.Fatalf("connecting the pool: %v", err)
+	}
+	t.Cleanup(timed.Close)
+	return postgres.NewContentStore(timed)
+}
+
+func TestContentUpdateReportsDescendantsItCannotLock(t *testing.T) {
+	t.Parallel()
+
+	store, _, author, pool := nestingStoresWithPool(t)
+	parent := mustNest(t, store, nil, "A Parent", author)
+	mustNest(t, store, &parent, "A Child", author)
+	holdInRival(t, pool.Config().ConnString(), "SELECT id FROM core.content WHERE slug = 'a-child' FOR UPDATE")
+
+	version := parent.UpdatedAt
+	parent.Title = "A Parent retitled"
+	parent.UpdatedAt = time.Now().UTC()
+
+	_, err := lockTimedContent(t, pool).Update(t.Context(), parent, version, nil, 0)
+
+	if err == nil || !strings.Contains(err.Error(), "lock timeout") {
+		t.Errorf("Update() error = %v, want the held descendant reported", err)
+	}
+}
+
 func TestContentUpdateRefusesAnAddressTakenMidWrite(t *testing.T) {
 	t.Parallel()
 

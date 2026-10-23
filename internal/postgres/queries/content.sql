@@ -166,6 +166,23 @@ rewritten AS (
 )
 SELECT path FROM rewritten WHERE path <> previous_path AND path LIKE 'page/%';
 
+-- name: LockDescendants :exec
+WITH RECURSIVE below AS (
+    SELECT c.id, 0 AS depth
+    FROM core.content c
+    WHERE c.id = @id
+  UNION ALL
+    SELECT child.id, below.depth + 1
+    FROM core.content child
+    JOIN below ON child.parent_id = below.id
+) CYCLE id SET looped USING trail
+SELECT p.id
+FROM core.content p
+JOIN below ON below.id = p.id
+WHERE p.id <> @id
+ORDER BY below.depth, p.id
+FOR NO KEY UPDATE OF p;
+
 -- name: CountChildren :one
 SELECT count(*) FROM core.content p WHERE p.parent_id = @id;
 
@@ -306,6 +323,23 @@ SELECT p.id, p.type, p.status, p.slug, p.title, p.content, p.excerpt,
 FROM core.content p
 WHERE p.id = @id
 FOR UPDATE;
+
+-- name: LockAncestors :exec
+WITH RECURSIVE chain AS (
+    SELECT c.id, c.parent_id, 0 AS level
+    FROM core.content c
+    WHERE c.id = @id
+  UNION ALL
+    SELECT up.id, up.parent_id, chain.level + 1
+    FROM core.content up
+    JOIN chain ON up.id = chain.parent_id
+) CYCLE id SET looped USING trail
+SELECT p.id
+FROM core.content p
+JOIN chain ON chain.id = p.id
+WHERE p.id <> @id
+ORDER BY chain.level DESC
+FOR KEY SHARE OF p;
 
 -- name: LockParent :one
 WITH RECURSIVE chain AS (
