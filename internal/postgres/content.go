@@ -510,8 +510,11 @@ func movedUnder(ctx context.Context, queries *db.Queries, c content.Content) (st
 	return parentHolds(ctx, queries, *c.ParentID, c.ID)
 }
 
-// parentHolds locks the parent and returns its address, refusing one gone, in the trash, or under the item.
+// parentHolds locks the parent and every item above it, returning its address unless gone, trashed or under the item.
 func parentHolds(ctx context.Context, queries *db.Queries, id, child uuid.UUID) (string, error) {
+	if err := queries.LockAncestors(ctx, id); err != nil {
+		return "", err
+	}
 	parent, err := queries.LockParent(ctx, db.LockParentParams{ID: id, ChildID: child})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", content.ErrParentType

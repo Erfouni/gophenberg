@@ -324,6 +324,23 @@ FROM core.content p
 WHERE p.id = @id
 FOR UPDATE;
 
+-- name: LockAncestors :exec
+WITH RECURSIVE chain AS (
+    SELECT c.id, c.parent_id, 0 AS level
+    FROM core.content c
+    WHERE c.id = @id
+  UNION ALL
+    SELECT up.id, up.parent_id, chain.level + 1
+    FROM core.content up
+    JOIN chain ON up.id = chain.parent_id
+) CYCLE id SET looped USING trail
+SELECT p.id
+FROM core.content p
+JOIN chain ON chain.id = p.id
+WHERE p.id <> @id
+ORDER BY chain.level DESC
+FOR KEY SHARE OF p;
+
 -- name: LockParent :one
 WITH RECURSIVE chain AS (
     SELECT c.id, c.parent_id

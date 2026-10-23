@@ -903,6 +903,29 @@ func (q *Queries) ListRevisions(ctx context.Context, contentID uuid.UUID) ([]Lis
 	return items, nil
 }
 
+const lockAncestors = `-- name: LockAncestors :exec
+WITH RECURSIVE chain AS (
+    SELECT c.id, c.parent_id, 0 AS level
+    FROM core.content c
+    WHERE c.id = $1
+  UNION ALL
+    SELECT up.id, up.parent_id, chain.level + 1
+    FROM core.content up
+    JOIN chain ON up.id = chain.parent_id
+) CYCLE id SET looped USING trail
+SELECT p.id
+FROM core.content p
+JOIN chain ON chain.id = p.id
+WHERE p.id <> $1
+ORDER BY chain.level DESC
+FOR KEY SHARE OF p
+`
+
+func (q *Queries) LockAncestors(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockAncestors, id)
+	return err
+}
+
 const lockContent = `-- name: LockContent :one
 SELECT p.id, p.type, p.status, p.slug, p.title, p.content, p.excerpt,
     p.author_id, p.published_at, p.created_at, p.updated_at, p.parent_id, p.path, p.fields
