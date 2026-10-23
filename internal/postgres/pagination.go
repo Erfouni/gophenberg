@@ -35,8 +35,7 @@ func checkPaginationEdit(ctx context.Context, queries *db.Queries, params db.Upd
 	return nil
 }
 
-// moveDescendants waits for every save of the children in flight, then carries them to the requested address,
-// refusing a reserved address.
+// moveDescendants locks the descendants and carries them to the requested address, refusing a reserved address.
 func moveDescendants(ctx context.Context, queries *db.Queries, params db.MoveDescendantsParams) error {
 	if err := queries.LockDescendants(ctx, params.ID); err != nil {
 		return err
