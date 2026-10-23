@@ -394,6 +394,39 @@ test.each([
 	},
 )
 
+test.each([
+	{ answer: 'success', said: 'Done. The site now holds what the file describes.' },
+	{ answer: 'failure', said: 'The site may already hold part of this file. Import it again to see what is left.' },
+] as const)(
+	'shows how an import ended in $answer when it ended while the dialog was closed',
+	async ({ answer, said }) => {
+		const applying = gate()
+		const requested = gate()
+		onTestFinished(applying.release)
+		planning(() => HttpResponse.json(PLAN))
+		server.use(
+			http.post('/api/definitions/apply', async () => {
+				requested.release()
+				await applying.held
+				return answer === 'success'
+					? HttpResponse.json({ applied: [], skipped: [] })
+					: HttpResponse.json({ error: 'in use', code: 'type_in_use' }, { status: 422 })
+			}),
+		)
+
+		const client = await importing('{"format":"1.0.0"}')
+		await userEvent.click(await screen.findByRole('button', { name: 'Apply' }))
+		await requested.held
+		const [, footerClose] = screen.getAllByRole('button', { name: 'Close' })
+		await userEvent.click(footerClose as HTMLElement)
+		applying.release()
+		await waitFor(() => expect(client.isMutating()).toBe(0))
+		await userEvent.click(await screen.findByRole('button', { name: 'Import definitions' }))
+
+		expect(await screen.findByText(said)).toBeInTheDocument()
+	},
+)
+
 test('shows what a chosen definitions file would change', async () => {
 	planning(() => HttpResponse.json(PLAN))
 

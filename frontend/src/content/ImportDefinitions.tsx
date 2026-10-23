@@ -235,6 +235,7 @@ function OutcomeView(props: { outcome: ImportOutcome }) {
  */
 export function ImportDefinitions() {
 	const [open, setOpen] = useState(false)
+	const [closedWhileApplying, setClosedWhileApplying] = useState(false)
 	const [notice, setNotice] = useState('')
 	const [plan, setPlan] = useState<DefinitionsPlan | null>(null)
 	const [file, setFile] = useState('')
@@ -273,24 +274,27 @@ export function ImportDefinitions() {
 	}
 
 	/**
-	 * Opens the dialog afresh, or as it stands while an import still applies.
+	 * Opens the dialog afresh, or as it was left while an import applied, or closes it.
+	 * @param next - Whether the dialog is opening.
 	 */
-	function opening() {
-		if (!perform.isPending) {
+	function change(next: boolean) {
+		if (!next) {
+			setClosedWhileApplying(perform.isPending)
+		} else if (!closedWhileApplying) {
 			read.reset()
 			perform.reset()
 			setPlan(null)
 			setOutcome(null)
 			setNotice('')
 		}
-		setOpen(true)
+		setOpen(next)
 	}
 	return (
 		<>
-			<Button variant="outline" size="compact" onClick={opening}>
+			<Button variant="outline" size="compact" onClick={() => change(true)}>
 				{__('Import definitions', 'gophenberg')}
 			</Button>
-			<Dialog.Root open={open} onOpenChange={setOpen}>
+			<Dialog.Root open={open} onOpenChange={change}>
 				<Dialog.Popup>
 					<Dialog.Header>
 						<Dialog.Title>{__('Import definitions', 'gophenberg')}</Dialog.Title>
@@ -340,7 +344,7 @@ export function ImportDefinitions() {
 						</Stack>
 					</Dialog.Content>
 					<Dialog.Footer>
-						<Button variant="outline" onClick={() => setOpen(false)}>
+						<Button variant="outline" onClick={() => change(false)}>
 							{__('Close', 'gophenberg')}
 						</Button>
 						{plan !== null && (
