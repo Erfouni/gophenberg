@@ -298,6 +298,102 @@ test('sends the file of the plan on screen when Apply is pressed the moment that
 	expect(JSON.parse(sent)).toEqual({ ...JSON.parse(latest), confirm: [] })
 })
 
+test.each([
+	{
+		way: 'Close',
+		close: async () => {
+			const [, footerClose] = screen.getAllByRole('button', { name: 'Close' })
+			await userEvent.click(footerClose as HTMLElement)
+		},
+	},
+	{ way: 'Escape', close: () => userEvent.keyboard('{Escape}') },
+])('shows no earlier plan when the dialog is opened again after closing it with $way', async ({ close }) => {
+	planning(() => HttpResponse.json(PLAN))
+
+	await importing('{"format":"1.0.0"}')
+	await userEvent.click(await screen.findByRole('checkbox', { name: /Remove Cook time/ }))
+	await close()
+	await userEvent.click(await screen.findByRole('button', { name: 'Import definitions' }))
+	await screen.findByRole('dialog', { name: 'Import definitions' })
+
+	expect(screen.queryByText('Add Event details')).not.toBeInTheDocument()
+	expect(screen.queryByRole('button', { name: 'Apply' })).not.toBeInTheDocument()
+})
+
+test('shows no plan that answers after the admin closed the dialog', async () => {
+	const answer = gate()
+	const requested = gate()
+	onTestFinished(answer.release)
+	planning(async () => {
+		requested.release()
+		await answer.held
+		return HttpResponse.json(PLAN)
+	})
+
+	const client = await importing('{"format":"1.0.0"}')
+	await requested.held
+	const [, footerClose] = screen.getAllByRole('button', { name: 'Close' })
+	await userEvent.click(footerClose as HTMLElement)
+	answer.release()
+	await waitFor(() => expect(client.isMutating()).toBe(0))
+	await userEvent.click(await screen.findByRole('button', { name: 'Import definitions' }))
+	await screen.findByRole('dialog', { name: 'Import definitions' })
+
+	expect(screen.queryByText('Add Event details')).not.toBeInTheDocument()
+	expect(screen.queryByRole('button', { name: 'Apply' })).not.toBeInTheDocument()
+})
+
+test('shows no plan that answers after the dialog is opened again', async () => {
+	const answer = gate()
+	const requested = gate()
+	onTestFinished(answer.release)
+	planning(async () => {
+		requested.release()
+		await answer.held
+		return HttpResponse.json(PLAN)
+	})
+
+	const client = await importing('{"format":"1.0.0"}')
+	await requested.held
+	const [, footerClose] = screen.getAllByRole('button', { name: 'Close' })
+	await userEvent.click(footerClose as HTMLElement)
+	await userEvent.click(await screen.findByRole('button', { name: 'Import definitions' }))
+	await screen.findByRole('dialog', { name: 'Import definitions' })
+	answer.release()
+	await waitFor(() => expect(client.isMutating()).toBe(0))
+
+	expect(screen.queryByText('Add Event details')).not.toBeInTheDocument()
+	expect(screen.queryByRole('button', { name: 'Apply' })).not.toBeInTheDocument()
+})
+
+test.each([
+	{ answer: 'success', said: 'Done. The site now holds what the file describes.' },
+	{ answer: 'failure', said: 'The site may already hold part of this file. Import it again to see what is left.' },
+] as const)(
+	'shows no earlier ending when the dialog is opened again after an import ended in $answer',
+	async ({ answer, said }) => {
+		planning(() => HttpResponse.json(PLAN))
+		server.use(
+			http.post('/api/definitions/apply', () =>
+				answer === 'success'
+					? HttpResponse.json({ applied: [], skipped: [] })
+					: HttpResponse.json({ error: 'in use', code: 'type_in_use' }, { status: 422 }),
+			),
+		)
+
+		await importing('{"format":"1.0.0"}')
+		await userEvent.click(await screen.findByRole('button', { name: 'Apply' }))
+		await screen.findByText(said)
+		const [, footerClose] = screen.getAllByRole('button', { name: 'Close' })
+		await userEvent.click(footerClose as HTMLElement)
+		await userEvent.click(await screen.findByRole('button', { name: 'Import definitions' }))
+		await screen.findByRole('dialog', { name: 'Import definitions' })
+
+		expect(screen.queryByText(said)).not.toBeInTheDocument()
+		expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+	},
+)
+
 test('shows what a chosen definitions file would change', async () => {
 	planning(() => HttpResponse.json(PLAN))
 

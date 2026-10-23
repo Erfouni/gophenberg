@@ -271,9 +271,23 @@ export function ImportDefinitions() {
 			agreed ? [...held, naming] : held.filter((one) => !sameConfirmation(one, naming)),
 		)
 	}
+
+	/**
+	 * Opens the dialog afresh, or as it stands while an import still applies.
+	 */
+	function opening() {
+		if (!perform.isPending) {
+			read.reset()
+			perform.reset()
+			setPlan(null)
+			setOutcome(null)
+			setNotice('')
+		}
+		setOpen(true)
+	}
 	return (
 		<>
-			<Button variant="outline" size="compact" onClick={() => setOpen(true)}>
+			<Button variant="outline" size="compact" onClick={opening}>
 				{__('Import definitions', 'gophenberg')}
 			</Button>
 			<Dialog.Root open={open} onOpenChange={setOpen}>
