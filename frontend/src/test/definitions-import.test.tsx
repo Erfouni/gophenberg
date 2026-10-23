@@ -151,6 +151,45 @@ test('keeps the latest planning error when an earlier plan succeeds last', async
 	expect(screen.queryByRole('button', { name: 'Apply' })).not.toBeInTheDocument()
 })
 
+test('sends a loss ticked on the latest plan only with the latest file when an earlier plan answers last', async () => {
+	const earlier = gate()
+	const requested = gate()
+	onTestFinished(earlier.release)
+	const latest = '{"format":"1.0.0","groups":[]}'
+	let sent = ''
+	planning(async ({ request }) => {
+		if ((await request.text()) !== latest) {
+			requested.release()
+			await earlier.held
+			return HttpResponse.json(PLAN)
+		}
+		return HttpResponse.json({ changes: [PLAN.changes[3]], warnings: [] })
+	})
+	server.use(
+		http.post('/api/definitions/apply', async ({ request }) => {
+			sent = await request.text()
+			return HttpResponse.json({ applied: [], skipped: [] })
+		}),
+	)
+
+	const client = await importing('{"format":"1.0.0"}')
+	await requested.held
+	await userEvent.upload(
+		screen.getByLabelText('Definitions file'),
+		new File([latest], 'latest.json', { type: 'application/json' }),
+	)
+	await userEvent.click(await screen.findByRole('checkbox', { name: /Remove Cook time/ }))
+	earlier.release()
+	await waitFor(() => expect(client.isMutating()).toBe(0))
+	await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+	await screen.findByText('Done. The site now holds what the file describes.')
+
+	expect(JSON.parse(sent)).toEqual({
+		...JSON.parse(latest),
+		confirm: [{ subject: 'field', key: 'cook-time', group: 'recipe-details' }],
+	})
+})
+
 test('shows what a chosen definitions file would change', async () => {
 	planning(() => HttpResponse.json(PLAN))
 
