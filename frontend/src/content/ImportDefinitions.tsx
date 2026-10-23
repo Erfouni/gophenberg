@@ -303,10 +303,7 @@ export function ImportDefinitions() {
 												setFile(answered.text)
 												setPlan(answered.plan)
 											},
-											onError: (cause) => {
-												setPlan(null)
-												setNotice(cause.message)
-											},
+											onError: (cause) => setNotice(cause.message),
 										})
 									}
 								}}
